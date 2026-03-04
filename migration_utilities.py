@@ -51,26 +51,30 @@ DATE_FORMATS = [
     '%Y%m%d_%H%M%S'            # smartphone apps filename date IMG_20230101_120000.jpg
 ]
 
-FOLDER_PATH = Path(r'J:\My Drive\Pictures\2008.7-2009.6 2nd 7-8')
-GOOGLE_FOLDER = r'etavern_gdrive:Media/2007.7-2008.6 1st 6-7'
+FOLDER_PATH = Path(r'J:\My Drive\Media\1950')
+GOOGLE_FOLDER = r'etavern_gdrive:Movies/2008.7-2009.6 2nd 7-8'
 
 # Step 3 and 4 Find files in A that are NOT in B
-COMPARE_FOLDER_A_PATH = Path(r'J:\My Drive\Pictures\2008.7-2009.6 2nd 7-8')
-COMPARE_FOLDER_B_PATH = Path(r'C:\Users\johnk\Downloads\PicLoadQueue\2008.7-2009.6 2nd 7-8')
-COMPARE_TYPE = 'photos'
-#COMPARE_TYPE = 'videos'
+COMPARE_FOLDER_A_PATH = Path(r'C:\Users\johnk\Downloads\PicLoadQueue\2008.7-2009.6 2nd 7-8')
+COMPARE_FOLDER_B_PATH = Path(r'J:\My Drive\Movies\2008.7-2009.6 2nd 7-8')
+#COMPARE_TYPE = 'photos'
+COMPARE_TYPE = 'videos'
 
 # Step 7 Copy with rclone
-SOURCE_FOLDER = r'J:\My Drive\Media\2006.7-2007.6 K 5-6'
-DEST_FOLDER = r'D:\Media\2006.7-2007.6 K 5-6'
+SOURCE_FOLDER = r'J:\My Drive\Media\2008.7-2009.6 2nd 7-8'
+DEST_FOLDER = r'D:\Media\2008.7-2009.6 2nd 7-8'
 
 #NEW_DATE = '2008:05:03 10:01:00' # Not coded yet. For files without date taken or creation date
 GROUP_NAME = ''
+OLD_GROUP_NAME = 'RMNP'
+NEW_GROUP_NAME = 'Colorado'
 
-# 1=Update timestamps 2=Update timestamps recursive 3=Flatten folders
-# 4=Compare 5=Compare recursive 6=Rename 7=Rename recursive
-# 8-Rename Remote 9=Move with rclone 10=Copy with rclone
-step = 1
+# 1-Update timestamps 2-Update timestamps recursive 3-Flatten folders
+# 4-Compare 5-Compare recursive 6-Rename 7-Rename recursive 8-Update group name
+# 9-Rename Remote 10-Rename Remote recursive 11-Update Remote group name
+# 12-Sync Remote timestamps 13-Sync Remote timestamps recursive
+# 14-Move with rclone 15-Copy with rclone
+step = 10
 
 def parse_date(value):
     for fmt in DATE_FORMATS:
@@ -299,9 +303,91 @@ def rename_files(folder_path: Path, GROUP_NAME: str, recursive: bool = False):
             file_path.rename(new_file_path)
             print(f'{file_path.name} → {new_file_path.name}')
 
-def rename_remote_files(remote_path: str):
-    # 1. Fetch file list with metadata in JSON format
-    # rclone lsjson is much faster than parsing text output
+def update_files_group_name(folder_path: Path, OLD_GROUP_NAME: str, NEW_GROUP_NAME: str):
+    for file_path in folder_path.iterdir():
+        if not file_path.is_file():
+            continue
+
+        if OLD_GROUP_NAME in file_path.name:
+            new_filename = file_path.name.replace(OLD_GROUP_NAME, NEW_GROUP_NAME)
+            new_file_path = file_path.with_name(new_filename)
+
+            if new_file_path.name != file_path.name:
+                # Handle Windows case-swap quirk (renaming 'A.JPG' to 'A.jpg' directly can fail)
+                temp_file_path = file_path.with_name(file_path.name + ".tmp")
+                file_path.rename(temp_file_path)
+                temp_file_path.rename(new_file_path)
+            
+                print(f"{file_path.name} → {new_file_path.name}")
+
+def rename_remote_files(remote_path: str, GROUP_NAME: str, recursive: bool = False):
+    # Fetch file list with metadata in JSON format. rclone lsjson is much faster than parsing text output
+    if recursive:
+        cmd = [
+            'rclone',
+            'lsjson',
+            '--recursive',
+            '--files-only',
+            remote_path
+        ]
+    else:
+        cmd = [
+            'rclone',
+            'lsjson',
+            '--files-only',
+            remote_path
+        ]
+        
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+        if result.returncode != 0:
+            print(f"Error fetching files: {result.stderr}")
+            return
+    
+        files = json.loads(result.stdout)
+        print(f"Found {len(files)} files. Starting update...")
+    except subprocess.CalledProcessError as e:
+        print(f'Error fetching file list: {e}')
+        return
+
+    for file_info in files:
+        # Skip directories
+        if file_info['IsDir']:
+            continue
+
+        old_rel_str = file_info['Path'] 
+        old_rel_path = Path(old_rel_str)
+        
+        # Parse the modification date. rclone returns ISO 8601 format: 2023-10-27T14:30:05.123Z
+        mod_time_str = file_info['ModTime'].split('.')[0] # Remove milliseconds
+        mod_time = datetime.strptime(mod_time_str, '%Y-%m-%dT%H:%M:%S')
+        formatted_date = mod_time.strftime('%Y%m%d_%H%M%S')
+
+        # Build new name
+        base_name = old_rel_path.stem
+
+        base_name = old_rel_path.stem
+        ext = old_rel_path.suffix.lower()
+
+        if not GROUP_NAME:
+            new_filename = f'{formatted_date} - {base_name}{ext}'
+        else:
+            new_filename = f'{formatted_date} - {GROUP_NAME} - {base_name}{ext}'
+
+        new_rel_path = old_rel_path.parent / new_filename
+        
+        # Execute the rename (moveto)
+        if old_rel_path != new_rel_path:
+            source = (Path(remote_path) / old_rel_path).as_posix()
+            dest = (Path(remote_path) / new_rel_path).as_posix()
+
+            print(f'Renaming: {source} -> {dest}')            
+            subprocess.run(['rclone', 'moveto', source, dest], check=True)
+            #subprocess.run(['rclone', 'moveto', source, dest,'--dry-run'], check=True)
+
+def update_remote_files_group_name(remote_path: str, OLD_GROUP_NAME: str, NEW_GROUP_NAME: str):
+    # Fetch file list with metadata in JSON format. rclone lsjson is much faster than parsing text output
     try:
         result = subprocess.run(
             ['rclone', 'lsjson', remote_path],
@@ -317,32 +403,92 @@ def rename_remote_files(remote_path: str):
         if file_info['IsDir']:
             continue
 
-        original_name = file_info['Name']
+        old_filename = file_info['Name']
         
-        # 2. Parse the modification date
-        # rclone returns ISO 8601 format: 2023-10-27T14:30:05.123Z
-        mod_time_str = file_info['ModTime'].split('.')[0] # Remove milliseconds
-        mod_time = datetime.strptime(mod_time_str, '%Y-%m-%dT%H:%M:%S')
-        formatted_date = mod_time.strftime('%Y%m%d_%H%M%S')
+        if OLD_GROUP_NAME in old_filename:
+            new_filename = old_filename.replace(OLD_GROUP_NAME, NEW_GROUP_NAME)
 
-        # 3. Handle Extension and New Name
-        name_parts = original_name.rsplit('.', 1)
-        if len(name_parts) > 1:
-            base_name = name_parts[0]
-            ext = name_parts[1].lower()
-            new_name = f'{formatted_date} - {base_name}.{ext}'
-        else:
-            # Handle files with no extension
-            new_name = f'{formatted_date} - {original_name}'
+            # Execute the rename (moveto)
+            if new_filename != old_filename:        
+                old_file_path = f'{remote_path}/{old_filename}'
+                new_file_path = f'{remote_path}/{new_filename}'
+                
+                print(f'Renaming: {old_filename} -> {new_filename}')
+                #subprocess.run(['rclone', 'moveto', old_file_path, new_file_path,'--dry-run'], check=True)
+                subprocess.run(['rclone', 'moveto', old_file_path, new_file_path], check=True)
 
-        # 4. Execute the rename (moveto)
-        if original_name != new_name:
-            old_path = f'{remote_path}/{original_name}'
-            new_path = f'{remote_path}/{new_name}'
+def sync_remote_timestamps(remote_path: str, folder_path: Path, recursive: bool = False):
+    if recursive:
+        cmd = [
+            'rclone',
+            'lsjson',
+            '--recursive',
+            '--metadata',
+            '--files-only',
+            remote_path
+        ]
+    else:
+        cmd = [
+            'rclone',
+            'lsjson',
+            '--metadata',
+            '--files-only',
+            remote_path
+        ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+        
+        if result.returncode != 0:
+            print(f"Error fetching files: {result.stderr}")
+            return
+
+        files = json.loads(result.stdout)
+        print(f"Found {len(files)} files. Starting update...")
+    except subprocess.CalledProcessError as e:
+            print(f'Error fetching file list: {e}')
+            return
+
+    for file in files:
+        filename = file.get('Path')
+        raw_btime = file.get('Metadata', {}).get('btime')
+        
+        if raw_btime and filename:
+            clean_timestamp = raw_btime.split('.')[0] # .000Z for rclone
+            file_remote_path = f"{remote_path}/{filename}"
             
-            print(f'Renaming: {original_name} -> {new_name}')
-            #subprocess.run(['rclone', 'moveto', old_path, new_path,'--dry-run'], check=True)
-            subprocess.run(['rclone', 'moveto', old_path, new_path], check=True)
+            print(f"Updating: {filename} -> {clean_timestamp}")
+            
+            # Apply the timestamp to the Google API
+            # This updates 'mtime', 'ModTime' and the Web UI 'Modified' label
+            subprocess.run([
+                'rclone', 'touch', 
+                '--timestamp', clean_timestamp, 
+                file_remote_path
+            ])
+
+        file_path = Path(folder_path) / filename
+        
+        try:
+            ext = file_path.suffix.lower()
+
+            if ext in PHOTO_EXTENSIONS:
+                file_date = get_photo_date_time_original(file_path)
+                update_photo_date_time_original(file_path, file_date)
+                update_NTFS_timestamps(file_path, file_date)
+            elif ext in VIDEO_EXTENSIONS:
+                file_date = get_video_creation_date(file_path)
+                update_NTFS_timestamps(file_path, file_date)
+            elif ext in {'.ppt', '.pptx'}:
+                file_date = get_ppt_creation_date(file_path)
+                update_NTFS_timestamps(file_path, file_date)
+            else:
+                print(f'[SKIP] Unknown Format: {file_path.name}')
+
+        except Exception as e:
+            print(f'Error processing {file_path}: {e}')
+
+    print("\nSuccess: All files have been synchronized.")
 
 def run_rclone_move(folder_path: Path, google_drive_path: str):
     cmd = [
@@ -399,10 +545,20 @@ if __name__ == '__main__':
         case 6:
             rename_files(FOLDER_PATH, GROUP_NAME, recursive=False)
         case 7:
-            rename_files(FOLDER_PATH, GROUP_NAME, recursive=True)            
+            rename_files(FOLDER_PATH, GROUP_NAME, recursive=True)
         case 8:
-            rename_remote_files(GOOGLE_FOLDER)
+            update_files_group_name(FOLDER_PATH, OLD_GROUP_NAME, NEW_GROUP_NAME)
         case 9:
-            run_rclone_move(FOLDER_PATH, GOOGLE_FOLDER)        
+            rename_remote_files(GOOGLE_FOLDER, GROUP_NAME, recursive=False)
         case 10:
+            rename_remote_files(GOOGLE_FOLDER, GROUP_NAME, recursive=True)
+        case 11:
+            update_remote_files_group_name(GOOGLE_FOLDER, OLD_GROUP_NAME, NEW_GROUP_NAME)
+        case 12:
+            sync_remote_timestamps(GOOGLE_FOLDER, FOLDER_PATH, recursive=False)
+        case 13:
+            sync_remote_timestamps(GOOGLE_FOLDER, FOLDER_PATH, recursive=True)
+        case 14:
+            run_rclone_move(FOLDER_PATH, GOOGLE_FOLDER)        
+        case 15:
             run_rclone_copy(SOURCE_FOLDER, DEST_FOLDER)
