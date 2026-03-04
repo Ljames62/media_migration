@@ -4,8 +4,8 @@ import os
 import re
 import subprocess
 
-import dateutil
 import shutil
+import dateutil
 from dateutil import parser
 
 from datetime import datetime
@@ -51,12 +51,12 @@ DATE_FORMATS = [
     '%Y%m%d_%H%M%S'            # smartphone apps filename date IMG_20230101_120000.jpg
 ]
 
-FOLDER_PATH = Path(rf'C:\Users\johnk\Downloads\Stage\2008 0228 Birthday')
-GOOGLE_FOLDER = rf'etavern_gdrive:Media/2007.7-2008.6 1st 6-7'
+FOLDER_PATH = Path(r'J:\My Drive\Pictures\2008.7-2009.6 2nd 7-8')
+GOOGLE_FOLDER = r'etavern_gdrive:Media/2007.7-2008.6 1st 6-7'
 
 # Step 3 and 4 Find files in A that are NOT in B
-COMPARE_FOLDER_A_PATH = Path(rf'C:\Users\johnk\Downloads\PicLoadQueue\2007.7-2008.6 1st 6-7')
-COMPARE_FOLDER_B_PATH = Path(rf'J:\My Drive\Pictures\2007.7-2008.6 1st 6-7')
+COMPARE_FOLDER_A_PATH = Path(r'J:\My Drive\Pictures\2008.7-2009.6 2nd 7-8')
+COMPARE_FOLDER_B_PATH = Path(r'C:\Users\johnk\Downloads\PicLoadQueue\2008.7-2009.6 2nd 7-8')
 COMPARE_TYPE = 'photos'
 #COMPARE_TYPE = 'videos'
 
@@ -64,22 +64,24 @@ COMPARE_TYPE = 'photos'
 SOURCE_FOLDER = r'J:\My Drive\Media\2006.7-2007.6 K 5-6'
 DEST_FOLDER = r'D:\Media\2006.7-2007.6 K 5-6'
 
-NEW_DATE = '2008:05:03 10:01:00' # Not coded yet. For files without date taken or creation date
+#NEW_DATE = '2008:05:03 10:01:00' # Not coded yet. For files without date taken or creation date
 GROUP_NAME = ''
 
 # 1=Update timestamps 2=Update timestamps recursive 3=Flatten folders
 # 4=Compare 5=Compare recursive 6=Rename 7=Rename recursive
 # 8-Rename Remote 9=Move with rclone 10=Copy with rclone
-step = 2
+step = 1
 
 def parse_date(value):
     for fmt in DATE_FORMATS:
         try:
-            return datetime.strptime(value, fmt)
+            clean_value = re.sub(r'/', '', value)
+            clean_value = re.sub(r'\s+', ' ', clean_value).strip()
+            return datetime.strptime(clean_value, fmt)
         except ValueError:
             continue
     
-    print(f"Could not parse date string: {value}")
+    print(f'Could not parse date string: {value}')
     return None
 
 def get_photo_date_time_original(photo_path: Path) -> datetime:
@@ -99,7 +101,7 @@ def get_photo_date_time_original(photo_path: Path) -> datetime:
             tags = metadata[0]
             if 'EXIF:DateTimeOriginal' in tags:
                 val = tags['EXIF:DateTimeOriginal']
-                print(f'Found EXIF DateTimeOriginal for {photo_path.name}: {val}')
+                #print(f'Found EXIF DateTimeOriginal for {photo_path.name}: {val}')
             elif 'EXIF:CreateDate' in tags:
                 val = tags['EXIF:CreateDate']
                 #print(f'Found CreateDate for {photo_path.name}: {val}')
@@ -134,6 +136,7 @@ def get_video_creation_date(video_path: Path) -> datetime:
         result = subprocess.run(cmd, capture_output=True, text=True)
         metadata = json.loads(result.stdout)
         tags = metadata.get('format', {}).get('tags', {})
+        #print(f"Metadata creation_time for {video_path.name}: {tags.get('creation_time')}")
         return parse_date(tags.get('creation_time'))
     
     except Exception:
@@ -148,46 +151,28 @@ def get_ppt_creation_date(ppt_path: Path) -> datetime:
     except Exception:
         return datetime.fromtimestamp(os.path.getmtime(ppt_path))
 
-def update_photo_date_time_original(photo_path: Path, new_date: datetime):
+def update_photo_date_time_original(photo_path: Path, file_date: datetime):
     try:
-        new_date_str = new_date.strftime('%Y:%m:%d %H:%M:%S')
+        file_date_str = file_date.strftime('%Y:%m:%d %H:%M:%S')
         cmd = [
-            'exiftool', '-F',
-            f'-AllDates={new_date_str}',
-            f'-FileModifyDate={new_date_str}',
-            f'-FileCreateDate={new_date_str}',
-            '-overwrite_original',
+            'exiftool', '-F', '-m', '-overwrite_original',
+            # Update EXIF dates
+            f'-EXIF:DateTimeOriginal={file_date_str}',
+            f'-EXIF:CreateDate={file_date_str}',
+            f'-EXIF:ModifyDate={file_date_str}',
+            # Update system dates
+            f'-FileModifyDate={file_date_str}',
+            f'-FileCreateDate={file_date_str}',
             str(photo_path)
         ]
         subprocess.run(cmd, check=True)
-        print(f'Updated EXIF all dates for {photo_path.name} to {new_date_str}')
+        print(f'Updated EXIF all dates for {photo_path} to {file_date_str}')
 
     except Exception as e:
         print(f'Error updating EXIF dates for {photo_path.name}: {e}')
 
-def update_timestamps(folder_path: Path, recursive: bool = False):
-    files_path = folder_path.rglob('*') if recursive else folder_path.iterdir()
-
-    for file_path in files_path:
-      if not file_path.is_file():
-          continue
-      
+def update_NTFS_timestamps(file_path: Path, file_date: datetime, recursive: bool = False):
       try:
-          ext = file_path.suffix.lower()
-
-          if ext in PHOTO_EXTENSIONS:
-              file_date = get_photo_date_time_original(file_path)
-              update_photo_date_time_original(file_path, file_date)
-              continue
-          elif ext in VIDEO_EXTENSIONS:
-              file_date = get_video_creation_date(file_path)
-          elif ext in {'.ppt', '.pptx'}:
-              file_date = get_ppt_creation_date(file_path)
-          else:
-              print(f'[SKIP] Unknown Format: {file_path.name}')
-              continue
-
-          print(f'{file_path.name}: {file_date}')
           win_timestamp = pywintypes.Time(file_date)     # Convert to Windows API format
           str_file_path = str(file_path)                 # Convert Path object to string for Windows API
 
@@ -206,6 +191,32 @@ def update_timestamps(folder_path: Path, recursive: bool = False):
           
           handle.Close()
           print(f'NTFS "Date modified", "Date created" updated: {file_path.name} -> {file_date}')
+
+      except Exception as e:
+          print(f'Error processing {file_path}: {e}')
+
+def update_timestamps(folder_path: Path, recursive: bool = False):
+    files_path = folder_path.rglob('*') if recursive else folder_path.iterdir()
+
+    for file_path in files_path:
+      if not file_path.is_file():
+          continue
+      
+      try:
+          ext = file_path.suffix.lower()
+
+          if ext in PHOTO_EXTENSIONS:
+              file_date = get_photo_date_time_original(file_path)
+              update_photo_date_time_original(file_path, file_date)
+              update_NTFS_timestamps(file_path, file_date)
+          elif ext in VIDEO_EXTENSIONS:
+              file_date = get_video_creation_date(file_path)
+              update_NTFS_timestamps(file_path, file_date)
+          elif ext in {'.ppt', '.pptx'}:
+              file_date = get_ppt_creation_date(file_path)
+              update_NTFS_timestamps(file_path, file_date)
+          else:
+              print(f'[SKIP] Unknown Format: {file_path.name}')
 
       except Exception as e:
           print(f'Error processing {file_path}: {e}')
@@ -238,13 +249,13 @@ def compare_folders(folder_path_a: Path, folder_path_b: Path, compare_type: str,
         valid_extensions = VIDEO_EXTENSIONS
 
     files_a = {
-        p.name(folder_path_a)
+        p.name
         for p in files_path_a
         if p.is_file()
         and p.suffix.lower() in valid_extensions
     }
     files_b = {
-        p.name(folder_path_b)
+        p.name
         for p in files_path_b
         if p.is_file()
         and p.suffix.lower() in valid_extensions
