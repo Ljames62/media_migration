@@ -23,5 +23,5 @@ def get_creation_date(video_path):
 
     return dt
 
-video_path = Path(r"C:\Users\johnk\Downloads\StageHold01\CIMG0007.AVI")
+video_path = Path(r"J:\My Drive\Movies\2011.7-2012.6 5th 10-11\2012 0303 Birthday\MP4 Conversions\20120303_140100 - 00000.mp4")
 print(get_creation_date(video_path))
