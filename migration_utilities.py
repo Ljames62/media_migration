@@ -16,6 +16,8 @@ import pywintypes
 import win32file
 import win32con
 
+import yt_dlp
+
 PHOTO_EXTENSIONS = [    
     '.jpg', '.jpeg', '.tiff', '.tif', # Formats with strong EXIF support
     '.png', '.webp',                  # Supported, but metadata varies by source
@@ -44,8 +46,8 @@ DATE_FORMATS = [
      
     '%m.%d.%Y %H:%M',          # US (day.month.year hour:minute)
     '%d.%m.%Y %H:%M',          # European (day.month.year hour:minute)
-    '%Y-%m-%dT&H:%M:%S+00:00'  # MP4 Conversion
-    '%Y:%m:%d %H:%M:%S%z'      # H264 MTS
+    '%Y-%m-%dT&H:%M:%S+00:00', # MP4 Conversion
+    '%Y:%m:%d %H:%M:%S%z',     # H264 MTS
     '%Y:%m:%d %H:%M',          # EXIF without seconds
     '%Y-%m-%dT%H:%M',          # ISO 8601 without seconds
     '%Y-%m-%d %H:%M',          # Common datetime format without seconds
@@ -53,37 +55,44 @@ DATE_FORMATS = [
     '%Y%m%d_%H%M%S'            # smartphone apps filename date IMG_20230101_120000.jpg
 ]
 
+#exiftool -time:all -s "C:\Users\johnk\Downloads\Stage\CIMG5391.JPG"
+
 # 1,2 Find files in A that are NOT in B
-COMPARE_FOLDER_A_PATH = Path(r'C:\Users\johnk\Downloads\PicLoadQueue\2014.7-2015.6 8th 13-14')
-COMPARE_FOLDER_B_PATH = Path(r'J:\My Drive\Movies\2014.7-2015.6 8th 13-14')
+COMPARE_FOLDER_A_PATH = Path(r'C:\Users\johnk\Downloads\PicLoadQueue\2015.7-2016.6 9th 14-15')
+COMPARE_FOLDER_B_PATH = Path(r'J:\My Drive\Media\2015-16 Grd 9 Yr 14-15\Videos')
 COMPARE_TYPE = 'photos'
 #COMPARE_TYPE = 'videos' 
 
-# 11-18 25-27     Must match for 25, 26
-FOLDER_PATH = Path(r'J:\My Drive\Pictures\2015.7-2016.6 9th 14-15')
-# 21-27
-GOOGLE_FOLDER = r'etavern_gdrive:/Media/2015-16 Grd 9 Yr 14-15'
+YOUTUBE_URL = r'https://www.youtube.com/watch?v=5aPJ3HGKCyI'
 
 # Step 28 rclone copy folder (recursive)
 SOURCE_FOLDER = r'J:\My Drive\Movies\2011.7-2012.6 5th 10-11'
 DEST_FOLDER = r'D:\Media\2011.7-2012.6 5th 10-11\Videos'
-
 # Step 29 rclone copyto file
-SOURCE_FILE = r'C:\Users\johnk\Downloads\PicLoadQueue\2010.7-2011.6 4th 9-10'
+SOURCE_FILE = r'J:\My Drive\Movies\2018.7-2019.6 12th 17-18\temp'
 DEST_FILE = r'D:\Media\2010.7-2011.6 4th 9-10'
 
-NEW_DATE = '2014:07:07 14:00:00'    # 13 For files without date taken or creation date
-OLD_GROUP_NAME = '- Colorado -'     # Step 17, 18, 23, 24
-NEW_GROUP_NAME = '-'     # Step 17, 18, 23, 24
 
-# 1-Compare 2-Compare recursive
+# 11-19 25-27     Must match for 25, 26
+FOLDER_PATH = Path(r'J:\My Drive\Movies\2018.7-2019.6 12th 17-18')
+# 21-27
+GOOGLE_FOLDER = r'etavern_gdrive:Media/2018-19 Grd 12 Yr 17-18'
+
+NEW_DATE = '2019:05:14 13:26:00'    # 13 For files without date taken or creation date
+OLD_GROUP_NAME = '- River Hill -'     # Step 17, 18, 23, 24
+NEW_GROUP_NAME = '- Howard -'     # Step 17, 18, 23, 24
+#FILENAME_LEN = 15 # Step 19
+
 # 11-Update timestamps 12-Update timestamps recursive 13-Update timestamps with new date 14-Flatten folders
-# 15-Rename 16-Rename recursive 17-Update group name 18-Update group name recursive
+# 15-Rename 16-Rename recursive 17-Update group name 18-Update group name recursive 19 Truncate filename
 # 21-Rename Remote 22-Rename Remote recursive 23-Update Remote group name 24-Update Remote group name recursive
 # 25-Sync Remote timestamps 26-Sync Remote timestamps recursive 27-Move with rclone
 # 31-Copy with rclone 32-Copyto file with rclone
-GROUP_NAME = ' - ' #' - '     ' - Colorado - '     ' - Kiawah '
-step = 2
+# 41-Compare 42-Compare recursive
+# 51-Download youtube video. Video will download in migration_utilities folder
+
+GROUP_NAME = ' - ' # ' - '     ' - Colorado - '     ' - Kiawah '
+step = 11
 
 def parse_date(value):
     for fmt in DATE_FORMATS:
@@ -262,15 +271,15 @@ def update_timestamps(folder_path: Path, new_date: str = '', recursive: bool = F
     cnt = 0
 
     for file_path in files_path:
-      if not file_path.is_file():
-          continue
+      if not file_path.is_file() or file_path.name.startswith('.'):
+          continue      
       
       try:
           ext = file_path.suffix.lower()
           cnt += 1
 
           if ext in PHOTO_EXTENSIONS:
-              if new_date.strip():                  
+              if new_date.strip():             
                   parse_new_date = parse_date(new_date)
                   file_date = parse_new_date + timedelta(minutes=cnt)
               else:
@@ -320,44 +329,15 @@ def flatten_folders(base_path: Path):
             subfolder.rmdir()
             print(f'Deleted empty folder: {subfolder.name}')
 
-def compare_folders(folder_path_a: Path, folder_path_b: Path, compare_type: str, recursive: bool = False):
-    files_path_a = folder_path_a.rglob('*') if recursive else folder_path_a.iterdir()
-    files_path_b = folder_path_b.rglob('*') if recursive else folder_path_b.iterdir()
-
-    if compare_type.lower() == 'photos':
-        valid_extensions = PHOTO_EXTENSIONS
-    elif compare_type.lower() == 'videos':
-        valid_extensions = VIDEO_EXTENSIONS
-
-    files_a = {
-        p.name
-        for p in files_path_a
-        if p.is_file()
-        and p.suffix.lower() in valid_extensions
-    }
-    files_b = {
-        p.name
-        for p in files_path_b
-        if p.is_file()
-        and p.suffix.lower() in valid_extensions
-    }
-
-    # Find files in A that are NOT in B
-    missing_from_b = files_a - files_b
-
-    if not missing_from_b:
-        print('All files in Folder A are already present in Folder B.')
-    else:
-        print(f'Found {len(missing_from_b)} files in Folder A missing from Folder B:\n')
-        for file in sorted(missing_from_b):
-            print(f' - {file}')
-
 def rename_files(folder_path: Path, group_name: str, recursive: bool = False):
-    files_path = folder_path.rglob('*') if recursive else folder_path.iterdir()
+    files_path = sorted(
+        folder_path.rglob('*') if recursive else folder_path.iterdir(),
+        key=lambda x: x.name.lower()  # .lower() ensures a standard A-Z sort regardless of case
+    )
     cnt = 0
 
     for file_path in files_path:
-        if not file_path.is_file():
+        if not file_path.is_file() or file_path.name.startswith('.'):
             continue
 
         filename = file_path.name
@@ -400,6 +380,28 @@ def update_files_group_name(folder_path: Path, old_group_name: str, new_group_na
                 temp_file_path.rename(new_file_path)
             
                 print(f"{file_path.name} → {new_file_path.name}")
+
+def truncate_filenames(folder_path: Path, char_len: int, recursive: bool = False):
+    files_path = folder_path.rglob('*') if recursive else folder_path.iterdir()
+
+    for file_path in files_path:
+        if not file_path.is_file() or file_path.name.startswith('.'):
+            continue
+        
+        name_stem = file_path.stem 
+        extension = file_path.suffix 
+
+        # Only process if the name (excluding extension) is longer than char_len
+        if len(name_stem) > char_len:
+            truncated_name = name_stem[:char_len] + extension
+            new_path = file_path.with_name(truncated_name)
+            
+            # Check for collisions before renaming
+            if not new_path.exists():
+                file_path.rename(new_path)
+                print(f"Renamed: '{file_path.name}' -> '{truncated_name}'")
+            else:
+                print(f"Collision: '{truncated_name}' already exists. Skipping '{file_path.name}'")
 
 def rename_remote_files(remote_path: str, group_name: str, recursive: bool = False):
     # Fetch file list with metadata in JSON format. rclone lsjson is much faster than parsing text output
@@ -653,12 +655,54 @@ def run_rclone_copyto(source_file: str, dest_file: str):
     subprocess.run(cmd, check=True)
     print('rclone copyto completed.')
 
+def compare_folders(folder_path_a: Path, folder_path_b: Path, compare_type: str, recursive: bool = False):
+    files_path_a = folder_path_a.rglob('*') if recursive else folder_path_a.iterdir()
+    files_path_b = folder_path_b.rglob('*') if recursive else folder_path_b.iterdir()
+
+    if compare_type.lower() == 'photos':
+        valid_extensions = PHOTO_EXTENSIONS
+    elif compare_type.lower() == 'videos':
+        valid_extensions = VIDEO_EXTENSIONS
+
+    files_a = {
+        p.name
+        for p in files_path_a
+        if p.is_file()
+        and p.suffix.lower() in valid_extensions
+    }
+    files_b = {
+        p.name
+        for p in files_path_b
+        if p.is_file()
+        and p.suffix.lower() in valid_extensions
+    }
+
+    # Find files in A that are NOT in B
+    missing_from_b = files_a - files_b
+
+    if not missing_from_b:
+        print('All files in Folder A are already present in Folder B.')
+    else:
+        print(f'Found {len(missing_from_b)} files in Folder A missing from Folder B:\n')
+        for file in sorted(missing_from_b):
+            print(f' - {file}')
+
+def download_video(youtube_url: str):
+    ydl_opts = {
+        'format': 'bestvideo+bestaudio/best', # 'bestvideo+bestaudio/best' ensures highest quality
+        'outtmpl': '%(title)s.%(ext)s', # Set the filename template (Title.Extension)
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            print(f"Starting download: {youtube_url}")
+            ydl.download([youtube_url])
+            print("Download complete!")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
 if __name__ == '__main__':
-    match step:
-        case 1:
-            compare_folders(COMPARE_FOLDER_A_PATH, COMPARE_FOLDER_B_PATH, COMPARE_TYPE, recursive=False)
-        case 2:
-            compare_folders(COMPARE_FOLDER_A_PATH, COMPARE_FOLDER_B_PATH, COMPARE_TYPE, recursive=True)
+    match step:        
         # Folder Path Tools
         case 11:
             update_timestamps(FOLDER_PATH, new_date='', recursive=False)
@@ -676,6 +720,9 @@ if __name__ == '__main__':
             update_files_group_name(FOLDER_PATH, OLD_GROUP_NAME, NEW_GROUP_NAME, recursive=False)
         case 18:
             update_files_group_name(FOLDER_PATH, OLD_GROUP_NAME, NEW_GROUP_NAME, recursive=True)
+        case 19:
+            truncate_filenames(FOLDER_PATH, FILENAME_LEN, recursive=True)
+
         # Google Folder Tools
         case 21:
             rename_remote_files(GOOGLE_FOLDER, group_name=GROUP_NAME, recursive=False)
@@ -691,8 +738,16 @@ if __name__ == '__main__':
             sync_remote_timestamps(GOOGLE_FOLDER, FOLDER_PATH, recursive=True)
         case 27:
             run_rclone_move(FOLDER_PATH, GOOGLE_FOLDER)
+
         # Source Destination Tools      
         case 31:
             run_rclone_copy(SOURCE_FOLDER, DEST_FOLDER)
         case 32:
             run_rclone_copyto(SOURCE_FILE, DEST_FILE)
+        case 41:
+            compare_folders(COMPARE_FOLDER_A_PATH, COMPARE_FOLDER_B_PATH, COMPARE_TYPE, recursive=False)
+        case 42:
+            compare_folders(COMPARE_FOLDER_A_PATH, COMPARE_FOLDER_B_PATH, COMPARE_TYPE, recursive=True)
+
+        case 51:
+            download_video(YOUTUBE_URL)

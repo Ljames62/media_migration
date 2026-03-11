@@ -17,6 +17,7 @@
 # python -m pip install python-dateutil
 # python -m pip install pywin32
 # python -m pip install olefile
+# python -m pip install yt-dlp
 
 # Restart VSCode after installing library or updating path
 
@@ -69,3 +70,12 @@
 #         "-overwrite_original",
 #         usb_folder
 #     ]
+
+# print(f"Metadata tags for {video_path.name}: {tags}")
+        # print(f"Metadata format for {video_path.name}: {metadata.get('format', {})}")
+        # print(f"Metadata streams for {video_path.name}: {metadata.get('streams', [])}")
+        # print(f"Metadata format tags for {video_path.name}: {metadata.get('format', {}).get('tags', {})}")
+        # print(f"Metadata stream tags for {video_path.name}: {[stream.get('tags', {}) for stream in metadata.get('streams', [])]}")
+
+#raw_btime = file.get('Metadata', {}).get('btime')
+#clean_timestamp = raw_btime.split('.')[0] # .000Z for rclone
