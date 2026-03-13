@@ -74,9 +74,9 @@ DEST_FILE = r'D:\Media\2010.7-2011.6 4th 9-10'
 
 
 # 11-19 25-27     Must match for 25, 26
-FOLDER_PATH = Path(r'J:\My Drive\Movies\2018.7-2019.6 12th 17-18')
+FOLDER_PATH = Path(r'C:\Users\johnk\Downloads\Stage')
 # 21-27
-GOOGLE_FOLDER = r'etavern_gdrive:Media/2018-19 Grd 12 Yr 17-18'
+GOOGLE_FOLDER = r'etavern_gdrive:Media/2000'
 
 NEW_DATE = '2019:05:14 13:26:00'    # 13 For files without date taken or creation date
 OLD_GROUP_NAME = '- River Hill -'     # Step 17, 18, 23, 24

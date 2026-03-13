@@ -1,0 +1,119 @@
+# Restart VSCode after installing library or updating path
+python -m pip install Pillow
+python -m pip install python-dateutil
+python -m pip install pywin32
+python -m pip install olefile
+python -m pip install yt-dlp
+
+# Set up windows to show Name, Date Modified, Size
+
+exiftool -DateTimeOriginal="2001:10:25 11:01:00" -overwrite_original "C:\Users\johnk\Downloads\Stage\PA250024.JPG"
+exiftool -AllDates="2001:09:05 14:00:00" -FileCreateDate="2001:09:05 14:00:00" -FileModifyDate="2001:09:05 14:00:00" -overwrite_original "C:\Users\johnk\Downloads\Stage"
+exiftool "-AllDates+<0:0:${filesequence;$_*=60}" "-FileCreateDate+<0:0:${filesequence;$_*=60}" "-FileModifyDate+<0:0:${filesequence;$_*=60}" -fileorder FileName -overwrite_original "C:\Users\johnk\Downloads\Stage"
+
+exiftool "-AllDates<DateTimeOriginal" "-FileModifyDate<DateTimeOriginal" "-FileCreateDate<DateTimeOriginal" -overwrite_original "C:\Users\johnk\Downloads\Stage"
+exiftool "-AllDates<DateTimeOriginal" "-FileModifyDate<DateTimeOriginal" "-FileCreateDate<DateTimeOriginal" -overwrite_original "C:\Users\johnk\Downloads\StageHold01"
+
+rclone copy "C:\Users\johnk\Downloads\StageUpload" etavern_gdrive:Photos/2002 --fast-list --drive-chunk-size 64M --buffer-size 32M --checkers=16 --transfers=8 --metadata -P
+rclone move "C:\Users\johnk\Downloads\Stage" etavern_gdrive:Photos/2002 --fast-list --drive-chunk-size 64M --buffer-size 32M --checkers=16 --transfers=8 --metadata -P
+
+rclone copy "C:\Users\johnk\Downloads\StageUpload" etavern_gdrive:Photos/2001 --metadata --dry-run	dry run shows what will happen
+rclone copy "C:\Users\johnk\Downloads\StageUpload" etavern_gdrive:Photos/2001 --fast-list --drive-chunk-size 64M --buffer-size 32M --checkers=16 --metadata -v
+rclone copy "C:\Users\johnk\Downloads\StageUpload" etavern_gdrive:Photos/2001 --metadata --log-file="C:\rclone\logs\log_%date:~-4,4%%date:~-10,2%%date:~-7,2%.txt" --log-level -P
+rclone copy "C:\Users\johnk\Downloads\StageUpload" etavern_gdrive:Photos/2001 --metadata --log-file="C:\rclone\logs\log_%date:~-4,4%%date:~-10,2%%date:~-7,2%.txt" --log-level INFO -P
+(Default) logs major events and errors, INFO logs INFO or ERROR, DEBUG logs everything
+
+exiftool -a -s -G1 -time:all "J:\My Drive\Movies\2011.7-2012.6 5th 10-11\2012 0605 Debate Team\20120324_140300 - 00019.mp4"
+exiftool "-FileModifyDate<CreateDate" "-FileCreateDate<CreateDate" -overwrite_original "C:\Users\johnk\Downloads\StageHold02\converted\CIMG0194.mp4"
+
+exiftool -all= -tagsfromfile @ -all:all -unsafe -m "J:\My Drive\Movies\2012.7-2013.6 6th 11-12\2012 0908 Thunder 1st Tournament\00059.MTS"
+exiftool -AllDates="2001:02:28 18:30:00" -overwrite_original "J:\My Drive\Pictures\2001 Pic\2001 0116-0314\2-28-01 John _ Alex recrop.jpg"
+exiftool -time:all -s "C:\Users\johnk\Downloads\Stage\CIMG5391.JPG"
+exiftool -m -overwrite_original "-ModifyDate=2014:06:15 12:01:00" "-CreateDate=2014:06:15 12:01:00" "J:\My Drive\Media\2013.7-2014.6 7th 12-13\_Videos\2014 0615 Mason Dixon\temp\CIMG5351.avi"
+rclone lsf etavern_gdrive:Photos/2001 --format "tp"
+2012:09:08 10:43:20-05:00
+
+rclone lsjson -M "etavern_gdrive:Media/1950/PA290033.JPG"
+rclone lsjson -M "etavern_gdrive:Movies/2005-06 4-5 Pre-K Mov/CIMG0007.AVI"
+rclone lsjson -M "C:\Users\johnk\Downloads\StageHold02\converted\CIMG0194.mp4"
+rclone lsd ""etavern_gdrive:Movies"
+
+Copy files from J dive to C Drive and run on files without custom names containing know dates or files with incorrect dates
+AllDates are Exif dates, not file dates
+Run twice if you receive a warning
+
+If you have photos organized in subfolders, Google Photos will strip the folder structure and display them all by date. To keep them organized, upload one folder at a time and immediately click "Add to Album" when the upload finishes.
+
+Set up windows to show Name, Date Modified, Size for jpg, mov, avi, mpg, mp4, mts, wmv
+For photos use Date Taken, for movies use Media Created
+# Protect numeric dashes (digit-digit)
+stem = re.sub(r'(\d)-(\d)', r'\1__DASH__\2', stem)
+
+# Remove unwanted characters (keep letters, numbers, space)
+stem = re.sub(r'[^A-Za-z0-9 ]+', '', stem)
+
+# Restore numeric dashes
+stem = stem.replace('__DASH__', '-')
+
+# Fallback: last modified time
+return datetime.fromtimestamp(os.path.getmtime(file_path))
+
+# Get the current Modification Time
+mtime = os.path.getmtime(str_path) 
+
+def update_google_timestamps(google_folder: str):
+    cmd_list = ['rclone', 'lsjson', google_folder, '--metadata', '--files-only']
+    result = subprocess.run(cmd_list, capture_output=True, text=True, encoding='utf-8')
+   
+    if result.returncode != 0:
+        print(f"Error fetching files: {result.stderr}")
+        return
+
+    files = json.loads(result.stdout)
+    print(f"Found {len(files)} files. Starting update...")
+
+    for file in files:
+        filename = file.get('Path')
+        raw_btime = file.get('Metadata', {}).get('btime')
+        
+        if raw_btime and filename:
+            clean_timestamp = raw_btime.split('.')[0] # .000Z for rclone
+            # The full path to the file on the remote
+            file_remote_path = f"{google_folder}/{filename}"
+            
+            print(f"Updating: {filename} -> {clean_timestamp}")
+            
+            # 2. Apply the timestamp to the Google API
+            # This updates 'mtime' and the Web UI 'Modified' label
+            subprocess.run([
+                'rclone', 'touch', 
+                '--timestamp', clean_timestamp, 
+                file_remote_path
+            ])
+
+            print(f"Updating Success: {filename} -> {clean_timestamp}")
+
+def run_exiftool_date_sync(usb_folder: str):
+    cmd = [
+        "exiftool",
+        # 1. First, try to sync everything to the File's System Modified Date (the fallback)
+        "-AllDates<FileModifyDate",
+        "-FileCreateDate<FileModifyDate",
+        
+        # 2. Then, try to sync everything to DateTimeOriginal. If this exists, it will overwrite the assignments above.
+        "-AllDates<DateTimeOriginal",
+        "-FileModifyDate<DateTimeOriginal",
+        "-FileCreateDate<DateTimeOriginal",
+       
+        "-overwrite_original",
+        usb_folder
+    ]
+
+print(f"Metadata tags for {video_path.name}: {tags}")
+print(f"Metadata format for {video_path.name}: {metadata.get('format', {})}")
+print(f"Metadata streams for {video_path.name}: {metadata.get('streams', [])}")
+print(f"Metadata format tags for {video_path.name}: {metadata.get('format', {}).get('tags', {})}")
+print(f"Metadata stream tags for {video_path.name}: {[stream.get('tags', {}) for stream in metadata.get('streams', [])]}")
+
+raw_btime = file.get('Metadata', {}).get('btime')
+clean_timestamp = raw_btime.split('.')[0] # .000Z for rclone
