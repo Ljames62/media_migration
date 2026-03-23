@@ -1,3 +1,8 @@
+1. py install
+2. py -3 # Verify python install
+3. Install VSCode python extensions
+4. Followed python tutorial https://code.visualstudio.com/docs/python/python-tutorial
+
 # Restart VSCode after installing library or updating path
 python -m pip install Pillow
 python -m pip install python-dateutil
@@ -28,7 +33,7 @@ exiftool "-FileModifyDate<CreateDate" "-FileCreateDate<CreateDate" -overwrite_or
 
 exiftool -all= -tagsfromfile @ -all:all -unsafe -m "J:\My Drive\Movies\2012.7-2013.6 6th 11-12\2012 0908 Thunder 1st Tournament\00059.MTS"
 exiftool -AllDates="2001:02:28 18:30:00" -overwrite_original "J:\My Drive\Pictures\2001 Pic\2001 0116-0314\2-28-01 John _ Alex recrop.jpg"
-exiftool -time:all -s "C:\Users\johnk\Downloads\Stage\CIMG5391.JPG"
+exiftool -time:all -s "C:\Users\johnk\Downloads\Temp0\20091006_020417 - Red Devils 03.vob"
 exiftool -m -overwrite_original "-ModifyDate=2014:06:15 12:01:00" "-CreateDate=2014:06:15 12:01:00" "J:\My Drive\Media\2013.7-2014.6 7th 12-13\_Videos\2014 0615 Mason Dixon\temp\CIMG5351.avi"
 rclone lsf etavern_gdrive:Photos/2001 --format "tp"
 2012:09:08 10:43:20-05:00
